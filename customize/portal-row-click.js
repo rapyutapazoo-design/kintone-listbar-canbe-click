@@ -1,7 +1,10 @@
 (function (root) {
   'use strict';
 
-  var INTERACTIVE = 'a, button, input, select, textarea, label, [role="button"], [contenteditable="true"]';
+  var INTERACTIVE = 'a, button, input, select, textarea, label, summary, ' +
+    '[role="button"], [role="link"], [role="checkbox"], [role="menuitem"], [role="tab"], ' +
+    '[tabindex]:not([tabindex="-1"]), [contenteditable]:not([contenteditable="false"])';
+  var PORTAL_PATH = /^\/k\/(?:guest\/\d+\/)?(?:m\/(?:guest\/\d+\/)?)?$/;
   var ROW_SELECTOR = 'tr, li, [role="row"], [role="listitem"]';
   var MOVE_LIMIT = 10;
   var NAV_GUARD_MS = 500;
@@ -25,11 +28,11 @@
     return null;
   }
 
-  function parseRecordHref(href, origin) {
+  function parseRecordHref(href, origin, baseHref) {
     try {
       if (typeof href !== 'string' || !href) return null;
       var base = new URL(origin);
-      var u = new URL(href, base.href);
+      var u = new URL(href, baseHref || base.href);
       if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
       if (u.origin !== base.origin) return null;
       var m;
@@ -51,14 +54,14 @@
     }
   }
 
-  function collectRecordLinks(row, origin) {
+  function collectRecordLinks(row, origin, baseHref) {
     var out = [];
     var seen = {};
     if (!row || !row.querySelectorAll) return out;
     var links = row.querySelectorAll('a[href]');
     for (var i = 0; i < links.length; i++) {
       var href = links[i].getAttribute('href');
-      var info = parseRecordHref(href, origin);
+      var info = parseRecordHref(href, origin, baseHref);
       if (!info) continue;
       var key = (info.guestSpaceId || '') + ':' + info.appId + ':' + info.recordId;
       if (seen[key]) continue;
@@ -68,11 +71,11 @@
     return out;
   }
 
-  function resolveRowTarget(row, origin) {
+  function resolveRowTarget(row, origin, baseHref) {
     try {
-      var links = collectRecordLinks(row, origin);
+      var links = collectRecordLinks(row, origin, baseHref);
       if (links.length !== 1) return null;
-      return new URL(links[0].href, origin).href;
+      return new URL(links[0].href, baseHref || origin).href;
     } catch (e) {
       return null;
     }
@@ -135,6 +138,18 @@
     }
   };
 
+  function isPortalLocation(loc) {
+    try {
+      if (!loc || !PORTAL_PATH.test(loc.pathname)) return false;
+      var h = loc.hash || '';
+      return h === '' || h === '#' || h === '#/' || /^#\/portal(?:[/?&].*)?$/.test(h);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  var active = false;
+
   var bound = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
 
   function init(container) {
@@ -151,14 +166,21 @@
       return root.location.origin;
     }
 
+    function baseHref() {
+      return (root.document && root.document.baseURI) || root.location.href;
+    }
+
     function onClick(ev) {
       try {
-        if (ev.type === 'click' && touch.moved) return;
+        if (!active || !isPortalLocation(root.location)) return;
+        if (ev.type === 'click' && touch.moved) {
+          touch.moved = false;
+          return;
+        }
         if (shouldIgnoreClick(ev, container)) return;
-        if (ev.shiftKey) return;
         var row = findRow(ev.target, container);
         if (!row) return;
-        var url = resolveRowTarget(row, origin());
+        var url = resolveRowTarget(row, origin(), baseHref());
         if (!url) return;
         var now = Date.now();
         if (now - lastNav < NAV_GUARD_MS) {
@@ -167,7 +189,7 @@
         }
         lastNav = now;
         ev.preventDefault();
-        var newTab = !!(ev.ctrlKey || ev.metaKey || (ev.type === 'auxclick' && ev.button === 1));
+        var newTab = !!(ev.ctrlKey || ev.metaKey || ev.shiftKey || (ev.type === 'auxclick' && ev.button === 1));
         api.nav.open(url, newTab);
       } catch (e) {
         /* 失敗時は標準動作 */
@@ -176,9 +198,10 @@
 
     function markPointer(ev) {
       try {
+        if (!active || !isPortalLocation(root.location)) return;
         var row = findRow(ev.target, container);
         if (!row || !row.style) return;
-        if (resolveRowTarget(row, origin())) row.style.cursor = 'pointer';
+        if (resolveRowTarget(row, origin(), baseHref())) row.style.cursor = 'pointer';
       } catch (e) {
         /* ignore */
       }
@@ -210,14 +233,6 @@
   }
 
   function getContainer() {
-    try {
-      var c = kintone.portal.getContentSpaceElement();
-      if (c) return c;
-    } catch (e) { /* next */ }
-    try {
-      var m = kintone.mobile.portal.getContentSpaceElement();
-      if (m) return m;
-    } catch (e2) { /* next */ }
     return root && root.document ? root.document.body : null;
   }
 
@@ -229,6 +244,7 @@
     findRow: findRow,
     init: init,
     getContainer: getContainer,
+    isPortalLocation: isPortalLocation,
     nav: nav
   };
 
@@ -240,6 +256,7 @@
 
   if (typeof kintone !== 'undefined' && kintone.events) {
     kintone.events.on(['app.portal.show', 'mobile.app.portal.show'], function (event) {
+      active = true;
       var c = getContainer();
       if (c) init(c);
       return event;
