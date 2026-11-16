@@ -45,8 +45,7 @@ function setup(opts) {
   const w = dom.window;
   const handlers = {};
   w.kintone = {
-    events: { on: (name, fn) => { (Array.isArray(name) ? name : [name]).forEach((n) => { handlers[n] = fn; }); } },
-    portal: { getContentSpaceElement: () => w.document.getElementById('space') }
+    events: { on: (name, fn) => { (Array.isArray(name) ? name : [name]).forEach((n) => { handlers[n] = fn; }); } }
   };
   const clock = { now: 1000000 };
   w.Date.now = () => clock.now;
@@ -134,15 +133,18 @@ describe('portal-row-click DOM', () => {
     t.fire();
     t.ev('c1', { ctrlKey: true });
     assert.equal(t.calls[0].newTab, true);
+    assert.equal(t.calls[0].url, ORIGIN + '/k/5/show#record=12');
     const t2 = setup();
     t2.fire();
     t2.ev('c1', { metaKey: true });
     assert.equal(t2.calls[0].newTab, true);
+    assert.equal(t2.calls[0].url, ORIGIN + '/k/5/show#record=12');
     const t3 = setup();
     t3.fire();
     t3.ev('c1', { type: 'auxclick', button: 1 });
     assert.equal(t3.calls.length, 1);
     assert.equal(t3.calls[0].newTab, true);
+    assert.equal(t3.calls[0].url, ORIGIN + '/k/5/show#record=12');
     const t4 = setup();
     t4.fire();
     t4.ev('c1', { type: 'auxclick', button: 2 });
@@ -155,6 +157,7 @@ describe('portal-row-click DOM', () => {
     const e = t.ev('c1', { shiftKey: true });
     assert.equal(t.calls.length, 1);
     assert.equal(t.calls[0].newTab, true);
+    assert.equal(t.calls[0].url, ORIGIN + '/k/5/show#record=12');
     assert.equal(e.defaultPrevented, true);
   });
   it('tabindex=-1 の要素は除外しない', () => {
@@ -162,6 +165,7 @@ describe('portal-row-click DOM', () => {
     t.fire();
     t.ev('ti2');
     assert.equal(t.calls.length, 1);
+    assert.equal(t.calls[0].url, ORIGIN + '/k/5/show#record=12');
   });
   it('相対 href は document.baseURI 基準で解決', () => {
     const t = setup();
@@ -171,6 +175,7 @@ describe('portal-row-click DOM', () => {
   });
   it('一覧がコンテンツスペース外でも委譲される（body 委譲）', () => {
     const t = setup();
+    t.w.kintone.portal = { getContentSpaceElement: () => t.w.document.getElementById('space') };
     t.fire();
     assert.equal(t.w.document.getElementById('space').contains(t.w.document.getElementById('c1')), false);
     t.ev('c1');
@@ -203,6 +208,117 @@ describe('portal-row-click DOM', () => {
     assert.equal(f('/k/5/', ''), false);
     assert.equal(f('/k/', '#/space/1'), false);
     assert.equal(f('/k/5/show', ''), false);
+    assert.equal(f('/k/m/', '#/portal'), true);
+    assert.equal(f('/k/', '#/portal?x=1'), true);
+    assert.equal(f('/k/', '#/ntf/list'), false);
+  });
+  it('行自身・外枠が tabindex/role を持っていても遷移する', () => {
+    const html = `<div id="outer" tabindex="0"><div role="tab" id="tabw"><table><tbody>
+      <tr id="rw" tabindex="0"><td id="x1">a</td><td><a href="/k/5/show#record=1">1</a></td></tr>
+      <tr id="rx"><td id="x2">b<span id="in" tabindex="0">i</span></td><td><a href="/k/5/show#record=2">2</a></td></tr>
+    </tbody></table></div></div>
+    <ul id="ul" role="link"><li id="lw" role="button"><span id="x3">c</span><a href="/k/5/show#record=3">3</a></li></ul>`;
+    const t = setup({ html });
+    t.fire();
+    t.ev('x1');
+    assert.equal(t.calls.length, 1);
+    t.clock.now += 600;
+    t.ev('x2');
+    assert.equal(t.calls.length, 2);
+    t.clock.now += 600;
+    t.ev('in');
+    assert.equal(t.calls.length, 2);
+    t.ev('x3');
+    assert.equal(t.calls.length, 3);
+  });
+  it('Shift＋クリックは選択中でも新規タブ、通常クリックは選択中不遷移', () => {
+    const t = setup();
+    t.fire();
+    const d = t.w.document;
+    const range = d.createRange();
+    range.selectNodeContents(d.getElementById('c1'));
+    const sel = t.w.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    t.ev('c1');
+    assert.equal(t.calls.length, 0);
+    t.ev('c1', { shiftKey: true });
+    assert.equal(t.calls.length, 1);
+    assert.equal(t.calls[0].newTab, true);
+    assert.equal(sel.isCollapsed, true);
+  });
+  it('mouseover: 遷移できる行だけ pointer、同一行はスキップ', () => {
+    const t = setup();
+    t.fire();
+    t.ev('c1', { type: 'mouseover' });
+    assert.equal(t.w.document.getElementById('r1').style.cursor, 'pointer');
+    t.ev('c3', { type: 'mouseover' });
+    assert.equal(t.w.document.getElementById('r3').style.cursor, '');
+  });
+  it('同一行 mouseover は再判定されない（スキップ）', () => {
+    const t = setup();
+    t.fire();
+    const r1 = t.w.document.getElementById('r1');
+    t.ev('c1', { type: 'mouseover' });
+    assert.equal(r1.style.cursor, 'pointer');
+    r1.style.cursor = 'help';
+    t.ev('sp', { type: 'mouseover' });
+    assert.equal(r1.style.cursor, 'help');
+  });
+  it('行外に出て戻ると再判定される', () => {
+    const t = setup();
+    t.fire();
+    const r1 = t.w.document.getElementById('r1');
+    t.ev('c1', { type: 'mouseover' });
+    r1.style.cursor = 'help';
+    t.ev('space', { type: 'mouseover' });
+    t.ev('c1', { type: 'mouseover' });
+    assert.equal(r1.style.cursor, 'pointer');
+  });
+  it('pointer が戻るのは自分が付けた行だけ', () => {
+    const t = setup();
+    t.fire();
+    const d = t.w.document;
+    const r1 = d.getElementById('r1');
+    const r3 = d.getElementById('r3');
+    r3.style.cursor = 'pointer';
+    t.ev('c3', { type: 'mouseover' });
+    assert.equal(r3.style.cursor, 'pointer');
+    t.ev('c1', { type: 'mouseover' });
+    assert.equal(r1.style.cursor, 'pointer');
+    assert.equal(r1.getAttribute('data-krc-cursor'), '1');
+    // 行内容が変わりリンクが無くなったら戻る
+    r1.querySelectorAll('a').forEach((a) => a.remove());
+    t.ev('space', { type: 'mouseover' });
+    t.ev('c1', { type: 'mouseover' });
+    assert.equal(r1.style.cursor, '');
+    assert.equal(r1.hasAttribute('data-krc-cursor'), false);
+  });
+  it('Shift＋ドラッグ（座標移動あり）は不遷移、動かない Shift＋クリックは新規タブ', () => {
+    const t = setup();
+    t.fire();
+    t.ev('c1', { type: 'mousedown', shiftKey: true, clientX: 0, clientY: 0 });
+    t.ev('c1', { shiftKey: true, clientX: 50, clientY: 0 });
+    assert.equal(t.calls.length, 0);
+    t.ev('c1', { type: 'mousedown', shiftKey: true, clientX: 5, clientY: 5 });
+    t.ev('c1', { shiftKey: true, clientX: 8, clientY: 6 });
+    assert.equal(t.calls.length, 1);
+    assert.equal(t.calls[0].newTab, true);
+    assert.equal(t.calls[0].url, ORIGIN + '/k/5/show#record=12');
+  });
+  it('NAV_GUARD で弾いた Shift＋クリックでも選択が解除される', () => {
+    const t = setup();
+    t.fire();
+    t.ev('c1');
+    const d = t.w.document;
+    const range = d.createRange();
+    range.selectNodeContents(d.getElementById('c1'));
+    const sel = t.w.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    t.ev('c1', { shiftKey: true });
+    assert.equal(t.calls.length, 1);
+    assert.equal(sel.isCollapsed, true);
   });
   it('500ms 経過後は再遷移できる', () => {
     const t = setup();
