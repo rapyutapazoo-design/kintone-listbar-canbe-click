@@ -298,13 +298,39 @@ describe('portal-row-click DOM', () => {
     const t = setup();
     t.fire();
     t.ev('c1', { type: 'mousedown', shiftKey: true, clientX: 0, clientY: 0 });
-    t.ev('c1', { shiftKey: true, clientX: 50, clientY: 0 });
+    t.ev('c1', { shiftKey: true, clientX: 50, clientY: 0, detail: 1 });
     assert.equal(t.calls.length, 0);
     t.ev('c1', { type: 'mousedown', shiftKey: true, clientX: 5, clientY: 5 });
-    t.ev('c1', { shiftKey: true, clientX: 8, clientY: 6 });
+    t.ev('c1', { shiftKey: true, clientX: 8, clientY: 6, detail: 1 });
     assert.equal(t.calls.length, 1);
     assert.equal(t.calls[0].newTab, true);
     assert.equal(t.calls[0].url, ORIGIN + '/k/5/show#record=12');
+  });
+  it('Shiftなし: mousedown→click が同座標なら同一タブ遷移、10px超なら不遷移', () => {
+    const t = setup();
+    t.fire();
+    t.ev('c1', { type: 'mousedown', clientX: 3, clientY: 3 });
+    t.ev('c1', { clientX: 3, clientY: 3, detail: 1 });
+    assert.equal(t.calls.length, 1);
+    assert.equal(t.calls[0].newTab, false);
+    t.ev('c1', { type: 'mousedown', clientX: 0, clientY: 0 });
+    t.ev('c1', { clientX: 40, clientY: 0, detail: 1 });
+    assert.equal(t.calls.length, 1);
+  });
+  it('detail===0（キーボード・合成）の click は残った mousedown 座標と比較しない', () => {
+    const t = setup();
+    t.fire();
+    t.ev('c1', { type: 'mousedown', clientX: 0, clientY: 0 });
+    t.ev('c1', { clientX: 90, clientY: 90, detail: 0 });
+    assert.equal(t.calls.length, 1);
+  });
+  it('中ボタンの mousedown→auxclick が同座標なら新規タブ、10px超なら不遷移', () => {
+    const t = setup();
+    t.fire();
+    t.ev('c1', { type: 'mousedown', button: 1, clientX: 1, clientY: 1 });
+    t.ev('c1', { type: 'auxclick', button: 1, clientX: 1, clientY: 1, detail: 1 });
+    assert.equal(t.calls.length, 1);
+    assert.equal(t.calls[0].newTab, true);
   });
   it('NAV_GUARD で弾いた Shift＋クリックでも選択が解除される', () => {
     const t = setup();

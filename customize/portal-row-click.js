@@ -180,8 +180,10 @@
     }
 
     function mouseMoved(ev) {
-      if (!mouse.down) return false;
+      var tracked = mouse.down;
       mouse.down = false;
+      // mousedown を伴わない click（キーボード操作・合成 click は detail===0）は移動量を判定しない
+      if (!tracked || ev.detail === 0) return false;
       return Math.abs((ev.clientX || 0) - mouse.x) > MOVE_LIMIT || Math.abs((ev.clientY || 0) - mouse.y) > MOVE_LIMIT;
     }
 
@@ -262,7 +264,7 @@
 
     container.addEventListener('click', onClick, false);
     container.addEventListener('auxclick', onClick, false);
-    container.addEventListener('mousedown', onMouseDown, false);
+    container.addEventListener('mousedown', onMouseDown, true);
     container.addEventListener('mouseover', markPointer, false);
     container.addEventListener('touchstart', onTouchStart, false);
     container.addEventListener('touchmove', onTouchMove, false);
