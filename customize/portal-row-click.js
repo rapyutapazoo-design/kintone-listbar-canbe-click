@@ -9,6 +9,7 @@
   var MOVE_LIMIT = 10;
   var NAV_GUARD_MS = 500;
   var BOUND_ATTR = 'data-krc-bound';
+  var PORTAL_BOUND_ATTR = 'data-krc-portal-bound';
   var CURSOR_ATTR = 'data-krc-cursor';
 
   function positiveInt(s) {
@@ -150,16 +151,29 @@
     }
   }
 
-  var active = false;
-
-  var bound = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
+  function markBodyBound(doc) {
+    // 診断専用: loading 中のみ DOMContentLoaded を待ち、それ以外は即時に印を試みる
+    try {
+      var mark = function () {
+        if (doc.body) doc.body.setAttribute(BOUND_ATTR, '1');
+      };
+      if (doc.readyState === 'loading' && doc.addEventListener) {
+        doc.addEventListener('DOMContentLoaded', mark, false);
+      } else {
+        mark();
+      }
+    } catch (e) {
+      /* ignore */
+    }
+  }
 
   function init(container) {
     if (!container || !root) return false;
-    if (bound && bound.has(container)) return false;
-    if (container.getAttribute && container.getAttribute(BOUND_ATTR)) return false;
-    if (bound) bound.add(container);
-    if (container.setAttribute) container.setAttribute(BOUND_ATTR, '1');
+    // 二重登録防止: スクリプトが複数回評価されても documentElement の属性で判定する
+    var mark = container.documentElement || container;
+    if (mark.getAttribute && mark.getAttribute(PORTAL_BOUND_ATTR)) return false;
+    if (mark.setAttribute) mark.setAttribute(PORTAL_BOUND_ATTR, '1');
+    markBodyBound(container);
 
     var lastNav = 0;
     var touch = { x: 0, y: 0, moved: false };
@@ -191,7 +205,7 @@
 
     function onClick(ev) {
       try {
-        if (!active || !isPortalLocation(root.location)) return;
+        if (!isPortalLocation(root.location)) return;
         if (ev.type === 'click' && touch.moved) {
           touch.moved = false;
           return;
@@ -226,7 +240,7 @@
 
     function markPointer(ev) {
       try {
-        if (!active || !isPortalLocation(root.location)) return;
+        if (!isPortalLocation(root.location)) return;
         var row = findRow(ev.target, container);
         if (!row || !row.style) {
           lastRow = null;
@@ -262,8 +276,8 @@
       }
     }
 
-    container.addEventListener('click', onClick, false);
-    container.addEventListener('auxclick', onClick, false);
+    container.addEventListener('click', onClick, true);
+    container.addEventListener('auxclick', onClick, true);
     container.addEventListener('mousedown', onMouseDown, true);
     container.addEventListener('mouseover', markPointer, false);
     container.addEventListener('touchstart', onTouchStart, false);
@@ -273,7 +287,7 @@
   }
 
   function getContainer() {
-    return root && root.document ? root.document.body : null;
+    return root && root.document ? root.document : null;
   }
 
   var api = {
@@ -291,15 +305,8 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) {
     root.KintoneRowClick = root.KintoneRowClick || {};
-    root.KintoneRowClick.portal = api;
+    if (!root.KintoneRowClick.portal) root.KintoneRowClick.portal = api;
   }
 
-  if (typeof kintone !== 'undefined' && kintone.events) {
-    kintone.events.on(['app.portal.show', 'mobile.app.portal.show'], function (event) {
-      active = true;
-      var c = getContainer();
-      if (c) init(c);
-      return event;
-    });
-  }
+  if (root && root.document) init(root.document);
 })(typeof window !== 'undefined' ? window : null);
