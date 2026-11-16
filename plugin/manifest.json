@@ -1,0 +1,24 @@
+{
+  "manifest_version": 1,
+  "version": 1,
+  "type": "APP",
+  "name": {
+    "ja": "一覧行クリック遷移",
+    "en": "Row Click to Record Detail"
+  },
+  "description": {
+    "ja": "PC版の表形式一覧で、行をクリックするとレコード詳細画面へ遷移します。",
+    "en": "Click anywhere on a row in the desktop table view to open the record detail."
+  },
+  "icon": "image/icon.png",
+  "desktop": {
+    "js": ["js/core.js", "js/kintone-api.js", "js/desktop.js"],
+    "css": []
+  },
+  "config": {
+    "html": "html/config.html",
+    "js": ["js/core.js", "js/kintone-api.js", "js/config.js"],
+    "css": [],
+    "required_params": []
+  }
+}

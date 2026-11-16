@@ -1,0 +1,18 @@
+{
+  "name": "kintone-row-click-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "kintone list row click to record detail plugin",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "@kintone/cli": "^1.22.6",
+    "jsdom": "^31.0.1"
+  }
+}
